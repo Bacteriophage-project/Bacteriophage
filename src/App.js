@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css';
 import Home from './mainPages/Home.jsx';
 import { Routes, Route } from 'react-router-dom';
-import Services from './mainPages/Services.jsx';
+import GenomeFetcher from './mainPages/GenomeFetcher.jsx';
 
 
 function App() {
@@ -10,7 +10,7 @@ function App() {
     <>
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/services" element={<Services/>}></Route>
+      <Route path="/genomefetcher" element={<GenomeFetcher/>}></Route>
     </Routes>
     </>
   );

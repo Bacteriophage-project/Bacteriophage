@@ -39,6 +39,8 @@
 
 .footer-links ul li {
   margin-bottom: 10px;
+  position: relative;
+  align-items: center;
 }
 
 .footer-links ul li a {
@@ -49,6 +51,36 @@
 
 .footer-links ul li a:hover {
   color: #00ff62;
+}
+
+.footer-links ul li a::before {
+  content: '';
+  position: absolute;
+  top: 0; 
+  left: 0;
+  width: 0; 
+  height: 2px;
+  background: #007bff;
+  transition: width 0.3s ease;
+}
+
+.footer-links ul li a::after {
+  content: '';
+  position: absolute;
+  bottom: 0; 
+  right: 0;
+  width: 0; 
+  height: 2px;
+  background: #007bff;
+  transition: width 0.3s ease 0.3s;
+}
+
+.footer-links ul li a:hover::before {
+  width: 100%;
+}
+
+.footer-links ul li a:hover::after {
+  width: 100%;
 }
 
 .footer-contact p {

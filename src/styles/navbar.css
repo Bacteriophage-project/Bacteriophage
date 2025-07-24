@@ -44,6 +44,7 @@
   text-decoration: none;
   color: #333;
   font-weight: 500;
+  border: 0;
 }
 
 .nav-links li a {
@@ -53,6 +54,7 @@
   font-weight: 500;
   padding: 5px 0;
   transition: color 0.3s ease;
+  border: 0;
 }
 
 .nav-links li a::after {
@@ -72,4 +74,17 @@
 
 .nav-links li a:hover::after {
   width: 100%;
+}
+
+.nav-link {
+  border: 0;
+}
+
+.navbar .check-in {
+  width: 60px;
+  padding: 3px 5px;
+  border: 0.5px solid black;
+  background-color: lightblue;
+  color: red;
+  border-radius: 15px;
 }

@@ -10,10 +10,12 @@ const Nav = () => {
         <span className="site-title">BacterioPhage</span>
       </div>
       <ul className="nav-links">
-        <li><a href="#home">Home</a></li>
-        <li><a href="#about">About</a></li>
-        <li><a href="#services">Services</a></li>
+        <li className='nav-link'><a href="#home">Home</a></li>
+        <li className='nav-link'><a href="#about">About</a></li>
+        <li className='nav-link'><a href="#services">Services</a></li>
       </ul>
+
+      <button className="check-in">Log In</button>
     </nav>
   );
 };
