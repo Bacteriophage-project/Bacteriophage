@@ -87,4 +87,14 @@
   background-color: lightblue;
   color: red;
   border-radius: 15px;
+  cursor: pointer;
+}
+
+.user-name {
+  font-weight: bold;
+  color: #00ff62;
+  text-transform: uppercase;
+  padding: 0.5rem 1rem;
+  background-color: #222;
+  border-radius: 8px;
 }

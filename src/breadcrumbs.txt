@@ -1,0 +1,17 @@
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCy6CcwQa7N8IcarLAuCPlzVsankL5qtjY",
+  authDomain: "bacteriophage-auth.firebaseapp.com",
+  projectId: "bacteriophage-auth",
+  storageBucket: "bacteriophage-auth.firebasestorage.app",
+  messagingSenderId: "342357172534",
+  appId: "1:342357172534:web:0c1781bf18704ffb0e5397"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);

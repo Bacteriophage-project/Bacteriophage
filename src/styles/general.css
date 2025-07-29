@@ -176,3 +176,11 @@ p[style*="color: red"] {
 .analysis-btn:active {
     transform: scale(0.98);
 }
+
+/* ProtectedRoute */
+.login-warning {
+  color: #e74c3c;
+  font-weight: bold;
+  font-family: 'Segoe UI', sans-serif;
+  margin-top: 5rem;
+}

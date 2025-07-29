@@ -3,7 +3,7 @@ import '../styles/general.css';
 import GenomeCard from '../components/GenomeCard';
 import AnalysisNavbar from '../components/AnalysisNavbar';
 import axios from 'axios';
-import Spinner from './Spinner'; // Make sure Spinner component exists
+import Spinner from './Spinner/Spinner'; // Make sure Spinner component exists
 
 const BACKEND_BASE_URL = 'http://10.5.16.108:8000';
 

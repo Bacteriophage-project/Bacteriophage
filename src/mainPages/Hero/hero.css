@@ -1,7 +1,7 @@
 .hero {
   height: 100vh;
   /*background: linear-gradient(to right, #007bff, #00ff62);*/
-  background-image: url('../assets/back.jpeg');
+  background-image: url('../../assets/back.jpeg');
   background-repeat: no-repeat;
   background-size: cover;
   display: flex;
