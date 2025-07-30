@@ -92,9 +92,10 @@
 
 .user-name {
   font-weight: bold;
-  color: #00ff62;
+  color: black;
   text-transform: uppercase;
   padding: 0.5rem 1rem;
-  background-color: #222;
+  background-color: transparent;
   border-radius: 8px;
+  border: 1px solid black;
 }
