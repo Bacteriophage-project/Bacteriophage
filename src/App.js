@@ -1,9 +1,9 @@
 import React from 'react';
 import './App.css';
 import Home from './mainPages/Home.jsx';
-import GenomeFetcher from './mainPages/GenomeFetcher.jsx';
 import { Routes, Route } from 'react-router-dom';
 import ProtectedRoute from './Routes/ProtectedRoute.jsx'; // Import it
+import Dashboard from './mainPages/Dashboard';
 
 function App() {
   return (
@@ -14,7 +14,7 @@ function App() {
           path="/genomefetcher" 
           element={
             <ProtectedRoute>
-              <GenomeFetcher />
+              <Dashboard/>
             </ProtectedRoute>
           } 
         />
