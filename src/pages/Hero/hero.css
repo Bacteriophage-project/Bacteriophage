@@ -1,0 +1,90 @@
+.hero {
+  height: 100vh;
+  /*background: linear-gradient(to right, #007bff, #00ff62);*/
+  background-image: url('../../assets/back.jpeg');
+  background-repeat: no-repeat;
+  background-size: cover;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  padding: 0 90px;
+  overflow: visible;
+}
+
+.hero-content {
+  flex: 1;
+  max-width: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  animation: fadeInLeft 1.2s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInLeft {
+  from {
+    transform: translateX(-40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.hero-title {
+  font-size: 3.3rem;
+  margin-bottom: 1rem;
+  font-weight: bold;
+  line-height: 1.2;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.hero-subtitle {
+  font-size: 1.4rem;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.hero-text {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  color: #e6f7ff;
+}
+
+.hero-button {
+  display: inline-block;
+  padding: 12px 26px;
+  background-color: white;
+  color: #007bff;
+  font-weight: bold;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease, color 0.3s ease;
+  box-shadow: 0 0 0 transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.hero-button:hover {
+  background-color: #0056b3;
+  color: white;
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+}
+
+.dna {
+  flex: 1;
+  height: 500px;
+  min-width: 300px;
+  overflow: visible;
+}
+
+.dna canvas {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}

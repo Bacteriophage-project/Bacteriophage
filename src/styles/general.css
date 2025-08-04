@@ -1,0 +1,193 @@
+/* general.css */
+
+/* Reset & base styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f8fc;
+    margin: 0;
+    padding: 0;
+    color: #333;
+}
+
+.container {
+    width: 100vw;
+    margin: 0;
+    padding: 1rem;
+}
+
+@media (min-width: 600px) {
+  .css-d1d1ir-MuiContainer-root {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
+.wrapper {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+h3 {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+    color: #007bff;
+}
+
+input.bioproject-input {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.fetchButton {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s ease;
+}
+
+.fetchButton:hover {
+    background-color: #0056b3;
+}
+
+.fetchButton:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.results {
+    margin-top: 2rem;
+}
+
+.genomes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Genome Card Styles */
+.genome-card {
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 1.2rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.genome-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.genome-organism {
+    font-size: 1.2rem;
+    color: #00b373;
+    margin-bottom: 0.5rem;
+}
+
+.accession, .ftp, .description {
+    margin: 0.3rem 0;
+    font-size: 0.95rem;
+    word-break: break-word;
+}
+
+a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.show-detail-button {
+    background-color: #00b373;
+    color: white;
+    padding: 0.5rem 1rem;
+    margin-top: 1rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+.show-detail-button:hover {
+    background-color: #009e63;
+}
+
+/* Detail section */
+.details {
+    margin-top: 1rem;
+    background-color: #f0f8ff;
+    padding: 1rem;
+    border-radius: 8px;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.details-list {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+.detail-item {
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+}
+
+/* Error message */
+p[style*="color: red"] {
+    font-weight: bold;
+    margin-top: 1rem;
+}
+
+/* ResFinder Button */
+.analysis-btn {
+    background-color: #00ff62;
+    color: #000;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    margin-top: 1.5rem;
+    margin-right: 1.5rem;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.analysis-btn:hover {
+    background-color: #00cc50;
+    transform: translateY(-2px);
+}
+
+.analysis-btn:active {
+    transform: scale(0.98);
+}
+
+/* ProtectedRoute */
+.login-warning {
+  color: #e74c3c;
+  font-weight: bold;
+  font-family: 'Segoe UI', sans-serif;
+  margin-top: 5rem;
+}
