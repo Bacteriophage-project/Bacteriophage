@@ -4,8 +4,6 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Container, Box } from '@mui/material';
 import Dashboard from './pages/Dashboard';
-import Results from './pages/Results';
-import Jobs from './pages/Jobs';
 import Home from './pages/Home';
 
 const theme = createTheme({
@@ -37,7 +35,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          borderRadius: 12,
+          borderRadius: 6,
         },
       },
     },
@@ -61,12 +59,10 @@ function App() {
       {/*<CssBaseline />*/}
       <Router>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', padding: "0" }}>
-          <Container maxWidth="xl" sx={{ flex: 1, p: 0 }}>
+          <Container maxWidth="xl" sx={{ flex: 1, p: 2 }}>
             <Routes>
               <Route path='/' element={<Home/>}></Route>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/results" element={<Results />} />
-              <Route path="/jobs" element={<Jobs />} />
             </Routes>
           </Container>
         </div>

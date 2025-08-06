@@ -37,6 +37,7 @@ import {
 } from '@mui/icons-material';
 import apiService, { GenomeData, JobStatus } from '../services/api';
 import Header from '../components/Header';
+import '../styles/general.css'
 
 const Dashboard = () => {
   const [bioprojectId, setBioprojectId] = useState('');
@@ -241,7 +242,7 @@ const Dashboard = () => {
       console.log('Downloading FASTA files from ResFinder results...');
       
       // Create a direct download link instead of handling blob
-      const downloadUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/download-resfinder-fasta-zip`;
+      const downloadUrl = `${process.env.REACT_APP_API_URL || 'http://10.2.14.131:5000'}/api/download-resfinder-fasta-zip`;
       console.log('Direct download URL:', downloadUrl);
       
       // Create a temporary link and trigger download
@@ -689,6 +690,7 @@ const Dashboard = () => {
       {genomeUrls.length > 0 && renderOperationButtons()}
 
       {/* Analysis Status & Downloads */}
+      {/* Analysis Status & Downloads */}
       {genomeUrls.length > 0 && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
@@ -704,12 +706,44 @@ const Dashboard = () => {
                   <Grid item xs={12} md={4} key={type}>
                     <Card variant="outlined" sx={{ height: '100%' }}>
                       <CardContent>
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
-                          {getAnalysisIcon(type)}
-                          <Typography variant="h6" sx={{ ml: 1 }}>
-                            {getAnalysisTitle(type)}
-                          </Typography>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            {getAnalysisIcon(type)}
+                            <Typography variant="h6" sx={{ ml: 1 }}>
+                              {getAnalysisTitle(type)}
+                            </Typography>
+                          </div>
+
+                          {/* Special button for resfinder */}
+                          {type === 'resfinder' && isCompleted && (
+                            <button
+                              className="download-result-button"
+                              style={{
+                                width: '100%',
+                                height: '300px',
+                                zIndex: '1000',
+                                padding: '6px 12px',
+                                backgroundColor: '#388b8eff',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                                outline: 'none',
+                              }}
+                              onClick={() => handleManualDownload(type, job.job_id)}
+                            >
+                              <DownloadIcon style={{ fontSize: '16px', color: 'white' }} />
+                              ResFinder Result
+                            </button>
+                          )}
                         </div>
+
                         {job && (
                           <div style={{ marginBottom: 2 }}>
                             <Chip
@@ -719,41 +753,73 @@ const Dashboard = () => {
                             />
                           </div>
                         )}
+
                         {isFailed && job.error && (
                           <Alert severity="error" sx={{ mb: 2 }}>
                             {job.error}
                           </Alert>
                         )}
+
                         {isCompleted && (
-                          <Button
-                            variant="contained"
-                            fullWidth
-                            startIcon={<DownloadIcon />}
-                            sx={{ 
-                              mt: 1,
-                              borderRadius: '8px',
-                              textTransform: 'none',
-                              fontSize: '0.875rem',
-                              fontWeight: 500,
-                              backgroundColor: '#1976d2 !important',
-                              color: 'white !important',
-                              '&:hover': {
-                                backgroundColor: '#1565c0 !important',
-                              },
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                              minHeight: '36px',
+                          <button
+                            className="download-results-button"
+                            style={{
+                              width: '100%',
+                              marginTop: '8px',
+                              padding: '12px 20px',
+                              backgroundColor: '#1976d2',
+                              color: 'yellow',
                               border: 'none',
+                              borderRadius: '8px',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '10px',
+                              boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)',
                               outline: 'none',
+                              textDecoration: 'none',
+                              textTransform: 'none',
+                              minHeight: '44px',
+                              transition: 'all 0.2s ease-in-out',
+                              position: 'relative',
+                              overflow: 'hidden',
+                            }}
+                            onMouseOver={(e) => {
+                              const target = e.target as HTMLButtonElement;
+                              target.style.backgroundColor = '#1565c0';
+                              target.style.boxShadow = '0 4px 12px rgba(25, 118, 210, 0.4)';
+                              target.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseOut={(e) => {
+                              const target = e.target as HTMLButtonElement;
+                              target.style.backgroundColor = '#1976d2';
+                              target.style.boxShadow = '0 2px 8px rgba(25, 118, 210, 0.3)';
+                              target.style.transform = 'translateY(0)';
+                            }}
+                            onMouseDown={(e) => {
+                              const target = e.target as HTMLButtonElement;
+                              target.style.transform = 'translateY(0)';
+                              target.style.boxShadow = '0 1px 4px rgba(25, 118, 210, 0.3)';
+                            }}
+                            onMouseUp={(e) => {
+                              const target = e.target as HTMLButtonElement;
+                              target.style.transform = 'translateY(-1px)';
+                              target.style.boxShadow = '0 4px 12px rgba(25, 118, 210, 0.4)';
                             }}
                             onClick={() => handleManualDownload(type, job.job_id)}
                           >
+                            <DownloadIcon style={{ fontSize: '18px', color: 'white' }} />
                             Download Results
-                          </Button>
+                          </button>
                         )}
                       </CardContent>
                     </Card>
                   </Grid>
                 );
+
               })}
             </Grid>
           </CardContent>

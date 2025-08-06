@@ -24,8 +24,6 @@ const Header: React.FC = () => {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: <ScienceIcon /> },
-    { label: 'Results', path: '/results', icon: <AssessmentIcon /> },
-    { label: 'Jobs', path: '/jobs', icon: <WorkIcon /> },
   ];
 
   return (
