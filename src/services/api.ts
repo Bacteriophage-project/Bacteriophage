@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://10.2.14.131:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ninety-jars-flow.loca.lt/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -48,6 +48,8 @@ export interface AnalysisResponse {
   job_id: string;
   message: string;
   status: string;
+  error?: string;
+  fallback_zip_path?: string;
 }
 
 // API functions
@@ -111,6 +113,14 @@ export const apiService = {
   // List PHASTEST zip files
   listPhastestZipFiles: async (): Promise<{ zip_files: Array<{ filename: string; size: number; size_mb: number }> }> => {
     const response = await api.get('/phastest-zip-files');
+    return response.data;
+  },
+
+  // Download PHASTEST zip files
+  downloadPhastestZip: async (): Promise<Blob> => {
+    const response = await api.get('/phastest-zip-files', {
+      responseType: 'blob',
+    });
     return response.data;
   },
 
@@ -185,10 +195,33 @@ export const apiService = {
   },
 
   // Resume job (placeholder)
-  resumeJob: async (jobId: string): Promise<void> => {
-    // TODO: Implement resume job endpoint
+  resumeJob: async (jobId: string) => {
     console.log('Resume job not implemented yet');
   },
+
+  // Check if result files exist for a job
+  checkFiles: async (jobId: string): Promise<any> => {
+    const response = await api.get(`/check-files/${jobId}`);
+    return response.data;
+  },
+
+  // Control job execution (stop/resume)
+  controlJob: async (jobId: string, action: 'stop' | 'resume'): Promise<any> => {
+    const response = await api.post(`/job-control/${jobId}/${action}`);
+    return response.data;
+  },
+
+  // Check network status
+  checkNetworkStatus: async (): Promise<any> => {
+    const response = await api.get('/network-status');
+    return response.data;
+  },
+
+  // Generic run analysis method
+  runAnalysis: async (type: 'resfinder' | 'phastest' | 'vfdb', genomeUrls: GenomeData[] = []): Promise<AnalysisResponse> => {
+    const response = await api.post(`/run-${type}, { genome_urls: genomeUrls }`);
+    return response.data;
+  }
 };
 
-export default apiService; 
+export default apiService;

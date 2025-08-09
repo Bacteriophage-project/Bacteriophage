@@ -1,369 +1,523 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
   CardContent,
   Typography,
   Button,
-  TextField,
   Grid,
-  Chip,
   Alert,
   CircularProgress,
+  Chip,
+  IconButton,
+  Tooltip,
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  IconButton,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  AlertTitle,
+  Paper
 } from '@mui/material';
 import {
+  BugReport as BugIcon,
+  PlayArrow as PlayIcon,
+  Stop as StopIcon,
   Download as DownloadIcon,
-  BugReport as BugReportIcon,
-  Science as ScienceIcon,
-  Info as InfoIcon,
+  Refresh as RefreshIcon,
+  WifiOff as WifiOffIcon,
+  Info as InfoIcon
 } from '@mui/icons-material';
-import apiService, { GenomeData, JobStatus } from '../services/api';
-import Header from '../components/Header';
-import '../styles/general.css'
+import { apiService } from '../services/api';
+import type { GenomeData } from '../services/api';
+
+interface JobStatus {
+  job_id: string;
+  job_type: 'resfinder' | 'phastest' | 'vfdb';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'stopped';
+  progress: number;
+  result: { [key: string]: any; fallback_zip_path?: string; };
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+interface FileStatus {
+  resfinder: boolean;
+  vfdb: boolean;
+  phastest: boolean;
+  resfinder_path?: string;
+  vfdb_path?: string;
+  phastest_dir?: string;
+}
+
+
 
 const Dashboard = () => {
-  const [bioprojectId, setBioprojectId] = useState('');
-  const [genomeUrls, setGenomeUrls] = useState<GenomeData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [fetchJobId, setFetchJobId] = useState<string | null>(null);
-  const [fetchStatus, setFetchStatus] = useState<JobStatus | null>(null);
   const [analysisJobs, setAnalysisJobs] = useState<{ [key: string]: JobStatus }>({});
-  const [selectedGenome, setSelectedGenome] = useState<GenomeData | null>(null);
-  const [infoModalOpen, setInfoModalOpen] = useState(false);
-  const [showPhastestFallback, setShowPhastestFallback] = useState(false);
-  const [downloadingFasta, setDownloadingFasta] = useState(false);
-  const [phastestZipFiles, setPhastestZipFiles] = useState<Array<{ filename: string; size: number; size_mb: number }>>([]);
+  const [fileStatus, setFileStatus] = useState<{ [key: string]: FileStatus }>({});
+  
+  const [loading, setLoading] = useState(false);
+  const [bioprojectId, setBioprojectId] = useState('');
+  const [genomes, setGenomes] = useState<GenomeData[]>([]);
+  const [fetchingGenomes, setFetchingGenomes] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; jobId: string; action: string; type: string }>({
+    open: false,
+    jobId: '',
+    action: '',
+    type: ''
+  });
+  const [phastestZipFiles, setPhastestZipFiles] = useState<Array<{ filename: string; size_mb: number }>>([]);
   const [loadingZipFiles, setLoadingZipFiles] = useState(false);
-  const [tempFastaZipFiles, setTempFastaZipFiles] = useState<Array<{ 
-    filename: string; 
-    temp_dir: string; 
-    full_path: string; 
-    size: number; 
-    size_mb: number; 
-    created_time: number 
-  }>>([]);
-  const [loadingTempZipFiles, setLoadingTempZipFiles] = useState(false);
 
-  // Poll for job status
+  const analysisJobsRef = useRef(analysisJobs);
+  analysisJobsRef.current = analysisJobs;
+
+  
+
+  // File-based job status checking
   useEffect(() => {
-    // Load PHASTEST zip files and temp FASTA zip files on component mount
-    loadPhastestZipFiles();
-    loadTempFastaZipFiles();
-    
-    const pollInterval = setInterval(async () => {
-      if (fetchJobId) {
-        try {
-          const status = await apiService.getJobStatus(fetchJobId);
-          setFetchStatus(status);
-          
-          if (status.status === 'completed' && status.result?.genomes) {
-            setGenomeUrls(status.result.genomes);
-            setFetchJobId(null);
-          } else if (status.status === 'failed') {
-            setError(status.error || 'Failed to fetch genomes');
-            setFetchJobId(null);
-          }
-        } catch (err) {
-          console.error('Error polling job status:', err);
-        }
-      }
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
-  }, [fetchJobId]);
-
-  // Poll for analysis job status
-  useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      const jobsToPoll = Object.entries(analysisJobs).filter(([_, job]) => 
+    const checkFiles = async () => {
+      const currentJobs = analysisJobsRef.current;
+      const jobsToCheck = Object.entries(currentJobs).filter(([_, job]) => 
         job && ['pending', 'running'].includes(job.status)
       );
 
-      for (const [type, job] of jobsToPoll) {
-        if (job) {
-          try {
-            const status = await apiService.getJobStatus(job.job_id);
+      for (const [type, job] of jobsToCheck) {
+        try {
+          const response = await fetch(`https://ninety-jars-flow.loca.lt/api/check-files/${job.job_id}`);
+          if (response.ok) {
+            const files = await response.json();
+            setFileStatus(prev => ({ ...prev, [job.job_id]: files }));
+
+            // Check if job is actually completed based on files
+            let isCompleted = false;
+            if (type === 'resfinder' && files.resfinder) isCompleted = true;
+            if (type === 'vfdb' && files.vfdb) isCompleted = true;
+            if (type === 'phastest' && files.phastest) isCompleted = true;
+
+            if (isCompleted && job.status !== 'completed') {
+              console.log(`🎉 Job ${job.job_id} completed (file detected)`);
             setAnalysisJobs(prev => ({
               ...prev,
-              [type]: status
-            }));
-            
-            // If PHASTEST job completed, refresh zip files list
-            if (type === 'phastest' && status.status === 'completed') {
-              loadPhastestZipFiles();
+                [type]: { ...job, status: 'completed' as const, completed_at: new Date().toISOString() }
+              }));
             }
-          } catch (err) {
-            console.error(`Error polling ${type} job status:`, err);
           }
+        } catch (error) {
+          console.error(`Error checking files for ${type}:, error`);
         }
       }
-    }, 3000);
+    };
 
-    return () => clearInterval(pollInterval);
-  }, [analysisJobs]);
+    const interval = setInterval(checkFiles, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
 
-
-
-  const handleManualDownload = async (type: string, jobId: string) => {
-    try {
-      const fileType = type === 'vfdb' ? 'vfdb_excel' : `${type}_csv`;
-      const blob = await apiService.downloadFile(jobId, fileType);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = type === 'vfdb' ? 'vfdb_results.xlsx' : `${type}_results.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setError(`Failed to download ${type} results: ${err.message}`);
-    }
-  };
-
-  const handleFetchGenomes = async () => {
-    if (!bioprojectId.trim()) {
-      setError('Please enter a BioProject ID');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setFetchStatus(null);
-
-    try {
-      const response = await apiService.fetchGenomes(bioprojectId);
-      setFetchJobId(response.job_id);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to start genome fetching');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRunAnalysis = async (type: 'resfinder' | 'phastest' | 'vfdb') => {
-    try {
-      setError(null);
-      
-      // Special handling for PHASTEST
-      if (type === 'phastest') {
-        try {
-          // Check PHASTEST API status first
-          const statusResponse = await apiService.checkPhastestStatus();
-          if (statusResponse.status === 'unavailable') {
-            setShowPhastestFallback(true);
-            return;
-          }
-        } catch (statusError) {
-          setShowPhastestFallback(true);
-          return;
-        }
-      }
-      
-      let response;
-      switch (type) {
-        case 'resfinder':
-          response = await apiService.runResFinder(genomeUrls);
-          break;
-        case 'phastest':
-          response = await apiService.runPhastest(genomeUrls);
-          break;
-        case 'vfdb':
-          response = await apiService.runVfdb(genomeUrls);
-          break;
-        default:
-          throw new Error(`Unknown analysis type: ${type}`);
-      }
-      
-      const jobId = response.job_id;
-      
-      setAnalysisJobs(prev => ({
-        ...prev,
-        [type]: {
-          job_id: jobId,
-          job_type: type,
-          status: 'pending',
-          progress: 0,
-          result: null,
-          error: null,
-          created_at: new Date().toISOString(),
-          completed_at: null
-        }
-      }));
-      
-      // Poll for job status
-      const pollInterval = setInterval(async () => {
-        try {
-          const jobStatus = await apiService.getJobStatus(jobId);
-          setAnalysisJobs(prev => ({
-            ...prev,
-            [type]: jobStatus
-          }));
-          
-          if (jobStatus.status === 'completed' || jobStatus.status === 'failed') {
-            clearInterval(pollInterval);
-          }
-        } catch (err) {
-          console.error('Error polling job status:', err);
-          clearInterval(pollInterval);
-        }
-      }, 2000);
-      
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || `Failed to start ${type} analysis`);
-    }
-  };
-
-  const handlePhastestFallback = async () => {
-    try {
-      setDownloadingFasta(true);
-      setError(null);
-      
-      console.log('Downloading FASTA files from ResFinder results...');
-      
-      // Create a direct download link instead of handling blob
-      const downloadUrl = `${process.env.REACT_APP_API_URL || 'http://10.2.14.131:5000'}/api/download-resfinder-fasta-zip`;
-      console.log('Direct download URL:', downloadUrl);
-      
-      // Create a temporary link and trigger download
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = 'phastest_fasta_files.zip';
-      link.target = '_blank'; // Open in new tab to avoid timeout issues
-      
-      console.log('Triggering direct download...');
-      
-      // Ensure the link is properly configured for download
-      link.style.display = 'none';
-      link.setAttribute('download', 'phastest_fasta_files.zip');
-      
-      document.body.appendChild(link);
-      
-      // Trigger the download
-      link.click();
-      
-      // Clean up
-      setTimeout(() => {
-        document.body.removeChild(link);
-      }, 100);
-      
-      setSuccessMessage('FASTA files download started! Check your downloads folder.');
-      setShowPhastestFallback(false);
-      
-    } catch (err: any) {
-      console.error('FASTA download error details:', {
-        message: err.message,
-        response: err.response,
-        status: err.response?.status,
-        statusText: err.response?.statusText,
-        data: err.response?.data,
-        stack: err.stack
-      });
-      setError('Failed to download FASTA files: ' + (err.response?.data?.error || err.message || 'Unknown error'));
-    } finally {
-      setDownloadingFasta(false);
-    }
-  };
-
+  // Load PHASTEST zip files
   const loadPhastestZipFiles = async () => {
+    setLoadingZipFiles(true);
     try {
-      setLoadingZipFiles(true);
       const response = await apiService.listPhastestZipFiles();
       setPhastestZipFiles(response.zip_files);
-    } catch (err) {
-      console.error('Failed to load PHASTEST zip files:', err);
+    } catch (error) {
+      console.error('Error loading PHASTEST zip files:', error);
     } finally {
       setLoadingZipFiles(false);
     }
   };
 
-  const loadTempFastaZipFiles = async () => {
-    try {
-      setLoadingTempZipFiles(true);
-      const response = await apiService.listTempFastaZipFiles();
-      setTempFastaZipFiles(response.zip_files);
-    } catch (err) {
-      console.error('Failed to load temporary FASTA zip files:', err);
-    } finally {
-      setLoadingTempZipFiles(false);
-    }
-  };
-
-  const handleDownloadTempFastaZip = async (tempDir: string, filename: string) => {
-    try {
-      const blob = await apiService.downloadTempFastaZip(tempDir, filename);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setError('Failed to download temporary FASTA zip file: ' + err.message);
-    }
-  };
-
+  // Download PHASTEST zip files
   const handleDownloadPhastestZip = async () => {
     try {
-      // Find the most recent PHASTEST job
-      const phastestJob = Object.values(analysisJobs).find(job => job?.job_type === 'phastest' && job?.status === 'completed');
-      if (!phastestJob) {
-        setError('No completed PHASTEST job found');
-        return;
-      }
-      
-      const blob = await apiService.downloadFile(phastestJob.job_id, 'phastest_zip');
+      const blob = await apiService.downloadPhastestZip();
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `phastest_results_${phastestJob.job_id}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'phastest_results.zip';
+      document.body.appendChild(a);
+      a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setError('Failed to download PHASTEST zip files: ' + err.message);
+      document.body.removeChild(a);
+      
+      setSnackbar({
+        open: true,
+        message: 'PHASTEST results downloaded successfully!',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error downloading PHASTEST zip:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to download PHASTEST results',
+        severity: 'error'
+      });
     }
   };
 
-  const handleInfoClick = (genome: GenomeData) => {
-    setSelectedGenome(genome);
-    setInfoModalOpen(true);
+  // Download FASTA files for manual PHASTEST submission
+  const handleDownloadFastaFiles = async () => {
+    if (genomes.length === 0) {
+      setSnackbar({
+        open: true,
+        message: 'No genomes available for download',
+        severity: 'warning'
+      });
+      return;
+    }
+
+    try {
+      const blob = await apiService.downloadFastaFiles(genomes);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'genomes_for_phastest.zip';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      setSnackbar({
+        open: true,
+        message: 'FASTA files downloaded! You can now submit them manually to phastest.ca',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error downloading FASTA files:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to download FASTA files',
+        severity: 'error'
+      });
+    }
   };
 
-  const handleCloseInfoModal = () => {
-    setInfoModalOpen(false);
-    setSelectedGenome(null);
+  const handleRunAnalysis = async (type: 'resfinder' | 'phastest' | 'vfdb') => {
+    if (type === 'phastest' && (!analysisJobs.resfinder || analysisJobs.resfinder.status !== 'completed')) {
+      setSnackbar({ open: true, message: 'ResFinder analysis must be completed successfully first.', severity: 'warning' });
+      return;
+    }
+    
+
+    if (genomes.length === 0) {
+      setSnackbar({ open: true, message: 'Please fetch genomes first before running analysis', severity: 'warning' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await apiService.runAnalysis(type, genomes);
+      const jobId = response.job_id;
+
+      // Check if the backend returned a failed status (e.g., PHASTEST API down)
+      if (response.status === 'failed') {
+        const newJob: JobStatus = {
+          job_id: jobId,
+          job_type: type,
+          status: 'failed',
+          progress: 0,
+          result: response.fallback_zip_path ? { fallback_zip_path: response.fallback_zip_path } : {},
+          error: response.error || null,
+          created_at: new Date().toISOString(),
+          completed_at: null
+        };
+        setAnalysisJobs(prev => ({ ...prev, [type]: newJob }));
+        setSnackbar({ open: true, message: response.error || `${type.toUpperCase()} analysis failed`, severity: 'error' });
+      } else {
+        // Normal successful start
+        const newJob: JobStatus = {
+          job_id: jobId,
+          job_type: type,
+          status: 'running',
+          progress: 0,
+          result: {},
+          error: null,
+          created_at: new Date().toISOString(),
+          completed_at: null
+        };
+        setAnalysisJobs(prev => ({ ...prev, [type]: newJob }));
+        setSnackbar({ 
+          open: true, 
+          message: `${type.toUpperCase()} analysis started successfully!`, 
+          severity: 'success' });
+      }
+    } catch (error: any) {
+      console.error(`Error starting ${type} analysis:, error`);
+      console.log('Full error response:', error.response?.data); // Debug log
+      const errorMessage = type === 'phastest'
+        ? 'The PHASTEST API is currently unavailable. Please try again later.'
+        : error.response?.data?.error || `Failed to start ${type} analysis`;
+
+      if (type === 'phastest') {
+        // For PHASTEST, check if the backend returned fallback_zip_path
+        const fallbackZipPath = error.response?.data?.fallback_zip_path;
+        console.log('Fallback zip path from backend:', fallbackZipPath); // Debug log
+        setAnalysisJobs(prev => ({
+          ...prev,
+          [type]: {
+            ...(prev[type] || {}),
+            status: 'failed',
+            error: errorMessage,
+            result: fallbackZipPath ? { fallback_zip_path: fallbackZipPath } : {}
+          } as JobStatus
+        }));
+      }
+
+      setSnackbar({ open: true, message: errorMessage, severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStopJob = async (jobId: string, type: string) => {
+    try {
+      const response = await fetch(`https://ninety-jars-flow.loca.lt/api/job-control/${jobId}/stop`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        setAnalysisJobs(prev => ({
+          ...prev,
+          [type]: { ...prev[type], status: 'stopped' as const, error: 'Job stopped by user' }
+        }));
+        setSnackbar({
+          open: true,
+          message: 'Job stopped successfully',
+          severity: 'info'
+        });
+      }
+    } catch (error) {
+      console.error('Error stopping job:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to stop job',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleResumeJob = async (jobId: string, type: string) => {
+    try {
+      const response = await fetch(`https://ninety-jars-flow.loca.lt/api/job-control/${jobId}/resume`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        setAnalysisJobs(prev => ({
+          ...prev,
+          [type]: { ...prev[type], status: 'pending' as const, error: null }
+        }));
+        setSnackbar({
+          open: true,
+          message: 'Job resumed successfully',
+          severity: 'success'
+        });
+      }
+    } catch (error) {
+      console.error('Error resuming job:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to resume job',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleDownloadFallbackZip = async (jobId: string) => {
+    try {
+      const response = await fetch(`https://ninety-jars-flow.loca.lt/api/download-fallback-zip/${jobId}`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'phastest_submission.zip';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        setSnackbar({
+          open: true,
+          message: 'Fallback ZIP file downloaded successfully!',
+          severity: 'success'
+        });
+      } else {
+        throw new Error('Failed to download fallback ZIP file');
+      }
+    } catch (error) {
+      console.error('Fallback ZIP download error:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to download fallback ZIP file',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleDownload = async (type: string, jobId: string) => {
+    try {
+      const currentFileStatus = fileStatus[jobId];
+      if (!currentFileStatus) return;
+
+      let filePath = '';
+      if (type === 'resfinder' && currentFileStatus.resfinder_path) {
+        filePath = currentFileStatus.resfinder_path;
+      } else if (type === 'vfdb' && currentFileStatus.vfdb_path) {
+        filePath = currentFileStatus.vfdb_path;
+      } else if (type === 'phastest' && currentFileStatus.phastest_dir) {
+        filePath = currentFileStatus.phastest_dir;
+      }
+
+      if (filePath) {
+        const response = await fetch(`https://ninety-jars-flow.loca.lt/api/download/${jobId}/${type}_csv`);
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${type}_results_${jobId}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          setSnackbar({
+            open: true,
+            message: 'Download started successfully!',
+            severity: 'success'
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      setSnackbar({
+        open: true,
+        message: 'Download failed',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleFetchGenomes = async () => {
+    if (!bioprojectId.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter a BioProject ID',
+        severity: 'warning'
+      });
+      return;
+    }
+
+    
+
+    setFetchingGenomes(true);
+    try {
+      const response = await apiService.fetchGenomes(bioprojectId.trim());
+      const jobId = response.job_id;
+      
+      // Poll for the job completion
+      const pollInterval = setInterval(async () => {
+        try {
+          const jobStatus = await apiService.getJobStatus(jobId);
+          
+          if (jobStatus.status === 'completed') {
+            clearInterval(pollInterval);
+            setFetchingGenomes(false);
+            
+            if (jobStatus.result && jobStatus.result.genomes) {
+              setGenomes(jobStatus.result.genomes);
+              setSnackbar({
+                open: true,
+                message: `Successfully fetched ${jobStatus.result.count} genomes for BioProject ${bioprojectId}`,
+                severity: 'success'
+              });
+            }
+          } else if (jobStatus.status === 'failed') {
+            clearInterval(pollInterval);
+            setFetchingGenomes(false);
+            setSnackbar({
+              open: true,
+              message: jobStatus.error || 'Failed to fetch genomes',
+              severity: 'error'
+            });
+          }
+        } catch (error) {
+          console.error('Error polling genome fetch job:', error);
+        }
+      }, 2000); // Poll every 2 seconds
+      
+      // Set a timeout to stop polling after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (fetchingGenomes) {
+          setFetchingGenomes(false);
+          setSnackbar({
+            open: true,
+            message: 'Genome fetching timed out',
+            severity: 'error'
+          });
+        }
+      }, 300000); // 5 minutes
+      
+    } catch (error: any) {
+      console.error('Error fetching genomes:', error);
+      setFetchingGenomes(false);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.error || 'Failed to fetch genomes',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleRefreshStatus = async (jobId: string, type: string) => {
+    try {
+      let jobStatus = await apiService.getJobStatus(jobId);
+      const files = await apiService.checkFiles(jobId);
+
+      // Force status to completed if result file exists, especially for vfdb
+      if (jobStatus.status !== 'completed' && files.vfdb && type === 'vfdb') {
+        jobStatus.status = 'completed';
+      }
+
+      setAnalysisJobs(prev => ({
+        ...prev,
+        [type]: {
+          ...jobStatus,
+          job_type: jobStatus.job_type as 'resfinder' | 'phastest' | 'vfdb',
+          status: jobStatus.status as 'pending' | 'running' | 'completed' | 'failed' | 'stopped'
+        }
+      }));
+
+      setFileStatus(prev => ({ ...prev, [jobId]: files }));
+
+      setSnackbar({ 
+        open: true, 
+        message: `Status refreshed: ${jobStatus.status}`, 
+        severity: 'info' });
+    } catch (error: any) {
+      console.error('Error refreshing status:', error);
+      setSnackbar({ open: true, message: 'Failed to refresh status', severity: 'error' });
+    }
   };
 
   const getAnalysisIcon = (type: string) => {
     switch (type) {
-      case 'resfinder': return <BugReportIcon />;
-      case 'phastest': return <ScienceIcon />;
-      case 'vfdb': return <ScienceIcon />;
-      default: return <ScienceIcon />;
+      case 'resfinder': return <BugIcon />;
+      case 'phastest': return <PlayIcon />;
+      case 'vfdb': return <InfoIcon />;
+      default: return <InfoIcon />;
     }
   };
 
@@ -372,467 +526,332 @@ const Dashboard = () => {
       case 'resfinder': return 'ResFinder (AMR)';
       case 'phastest': return 'PHASTEST (Prophages)';
       case 'vfdb': return 'VFDB (Virulence Factors)';
-      default: return type;
+      default: return type.toUpperCase();
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'success';
+      case 'running': return 'primary';
+      case 'pending': return 'warning';
       case 'failed': return 'error';
-      case 'running': return 'warning';
+      case 'stopped': return 'default';
       default: return 'default';
     }
   };
 
-  // Move operation buttons to the top of the analysis section
-  const renderOperationButtons = () => (
-    <div style={{ display: 'flex', gap: 2, marginBottom: 3 }}>
-      {(['resfinder', 'phastest', 'vfdb'] as const).map((type) => {
-        const job = analysisJobs[type];
-        const isRunning = job && ['pending', 'running'].includes(job.status);
+  const renderAnalysisCard = (type: 'resfinder' | 'phastest' | 'vfdb', job?: JobStatus) => {
+    const isCompleted = job?.status === 'completed';
+    const isRunning = job?.status === 'running';
+    const isResfinderCompleted = analysisJobs.resfinder?.status === 'completed';
+    const showPhastestButton = type !== 'phastest' || isResfinderCompleted;
+    const isStopped = job?.status === 'stopped';
+    const hasError = job?.status === 'failed';
+
+    const cardContent = () => {
+      // Initial state: No job has been run or a previous run failed without a specific error to show.
+      if (!job || (hasError && !job.error)) {
         return (
-          <Button
-            key={type}
-            variant="contained"
-            onClick={() => handleRunAnalysis(type)}
-            disabled={loading || isRunning}
-            startIcon={isRunning ? <CircularProgress size={20} /> : getAnalysisIcon(type)}
-            sx={{ minWidth: 180 }}
-          >
-            {isRunning ? 'Running...' : `Run ${getAnalysisTitle(type)}`}
-          </Button>
+          <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            {genomes.length === 0 ? (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Please fetch genomes first to run analysis
+              </Alert>
+            ) : type === 'phastest' && !isResfinderCompleted ? (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Complete ResFinder analysis first to unlock PHASTEST
+              </Alert>
+            ) : (
+              <Typography variant="body2" sx={{ mb: 2, color: 'success.main' }}>
+                ✓ Ready to analyze {genomes.length} genomes
+              </Typography>
+            )}
+            {showPhastestButton && (
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={() => handleRunAnalysis(type)}
+                disabled={loading || genomes.length === 0}
+                startIcon={<PlayIcon />}
+                sx={{ mt: 'auto' }}
+              >
+                Start Analysis
+              </Button>
+            )}
+          </div>
         );
-      })}
-    </div>
-  );
+      }
 
-  // Compact genome table
-  const renderGenomeTable = () => (
-    <TableContainer component={Paper} sx={{ mb: 3 }}>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>#</TableCell>
-            <TableCell>Name</TableCell>
-            <TableCell>Submitter</TableCell>
-            <TableCell>Date</TableCell>
-            <TableCell>URL</TableCell>
-            <TableCell>Info</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {genomeUrls.map((genome, index) => (
-            <TableRow key={index}>
-              <TableCell>{index + 1}</TableCell>
-              <TableCell>{genome.species || genome.assembly_name || genome.genus}</TableCell>
-              <TableCell>{genome.submitter}</TableCell>
-              <TableCell>{genome.submission_date}</TableCell>
-              <TableCell>
-                <Tooltip title={genome.url} placement="top" arrow>
-                  <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{genome.url}</span>
-                </Tooltip>
-              </TableCell>
-              <TableCell>
-                <IconButton 
-                  size="small" 
-                  onClick={() => handleInfoClick(genome)}
-                  title="View detailed information"
-                >
-                  <InfoIcon fontSize="small" />
+      // Active state: Job is running, completed, stopped, or failed with an error.
+      return (
+        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Chip label={job.status} color={getStatusColor(job.status)} size="small" />
+            {isRunning && <CircularProgress size={16} />}
+          </div>
+
+          {hasError && job.error && (
+            <Alert severity="error" sx={{ fontSize: '0.875rem' }}>{job.error}</Alert>
+          )}
+          {hasError && type === 'phastest' && job.result?.fallback_zip_path && (
+            <>
+              <Alert severity="info" sx={{ fontSize: '0.875rem', mb: 1 }}>
+                You can download the FASTA files and submit them manually to phastest.ca
+              </Alert>
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={() => {
+                    if (job.job_id) {
+                      handleDownloadFallbackZip(job.job_id);
+                    }
+                  }}
+                startIcon={<DownloadIcon />}
+                sx={{ mt: 1 }}
+              >
+                Download Zipped FASTA
+              </Button>
+            </>
+          )}
+
+          <div style={{ marginTop: 'auto', display: 'flex', gap: 1, width: '100%' }}>
+            {isCompleted && (
+              <Button fullWidth variant="contained" onClick={() => handleDownload(type, job.job_id)} startIcon={<DownloadIcon />}>
+                Download Results
+              </Button>
+            )}
+            {isRunning && (
+              <Button fullWidth variant="outlined" color="error" size="small" onClick={() => setConfirmDialog({ open: true, jobId: job.job_id, action: 'stop', type })} startIcon={<StopIcon />}>
+                Stop
+              </Button>
+            )}
+            {(isStopped || hasError) && (
+              <Button fullWidth variant="outlined" size="small" onClick={() => handleRunAnalysis(type)} startIcon={<PlayIcon />}>
+                Retry
+              </Button>
+            )}
+          </div>
+          {!isCompleted && (
+             <Tooltip title="Refresh Status">
+                <IconButton onClick={() => handleRefreshStatus(job.job_id, type)} size="small" sx={{ position: 'absolute', top: 8, right: 8 }}>
+                  <RefreshIcon />
                 </IconButton>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
-
-  const renderPhastestFallback = () => (
-    <Alert severity="warning" sx={{ mb: 3 }}>
-      <AlertTitle>PHASTEST API Unavailable</AlertTitle>
-      The PHASTEST API is currently down for maintenance or updates.
-      <div style={{ marginTop: 2 }}>
-        <Button
-          variant="outlined"
-          onClick={handlePhastestFallback}
-          disabled={downloadingFasta}
-          startIcon={downloadingFasta ? <CircularProgress size={20} /> : <DownloadIcon />}
-        >
-          {downloadingFasta ? 'Downloading...' : 'Download FASTA Files from ResFinder Results'}
-        </Button>
-      </div>
-      <Typography variant="body2" sx={{ mt: 1 }}>
-        After downloading, visit{' '}
-        <a href="https://phastest.ca" target="_blank" rel="noopener noreferrer">
-          phastest.ca
-        </a>{' '}
-        to submit your files manually.
-      </Typography>
-    </Alert>
-  );
-
-  const renderGenomeInfoModal = () => (
-    <Dialog 
-      open={infoModalOpen} 
-      onClose={handleCloseInfoModal}
-      maxWidth="md"
-      fullWidth
-    >
-      <DialogTitle>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <InfoIcon color="primary" />
-          <Typography variant="h6">
-            Genome Details
-          </Typography>
+              </Tooltip>
+          )}
         </div>
-      </DialogTitle>
-      <DialogContent>
-        {selectedGenome && (
-          <List>
-            <ListItem>
-              <ListItemText 
-                primary="Organism Information"
-                secondary={
-                  <div style={{ marginTop: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Organism:</strong> {selectedGenome.organism || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Genus:</strong> {selectedGenome.genus || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Species:</strong> {selectedGenome.species || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Strain:</strong> {selectedGenome.strain || 'N/A'}
-                    </Typography>
-                  </div>
-                }
-              />
-            </ListItem>
-            <Divider />
-            <ListItem>
-              <ListItemText 
-                primary="Assembly Information"
-                secondary={
-                  <div style={{ marginTop: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Assembly Accession:</strong> {selectedGenome.assembly_accession || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Assembly Name:</strong> {selectedGenome.assembly_name || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Assembly Level:</strong> {selectedGenome.assembly_level || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Taxonomy ID:</strong> {selectedGenome.taxonomy_id || 'N/A'}
-                    </Typography>
-                  </div>
-                }
-              />
-            </ListItem>
-            <Divider />
-            <ListItem>
-              <ListItemText 
-                primary="Genome Statistics"
-                secondary={
-                  <div style={{ marginTop: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Contig Count:</strong> {selectedGenome.contig_count || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Genome Size:</strong> {selectedGenome.genome_size || 'N/A'}
-                    </Typography>
-                  </div>
-                }
-              />
-            </ListItem>
-            <Divider />
-            <ListItem>
-              <ListItemText 
-                primary="Submission Information"
-                secondary={
-                  <div style={{ marginTop: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Submitter:</strong> {selectedGenome.submitter || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Submission Date:</strong> {selectedGenome.submission_date || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>BioProject ID:</strong> {selectedGenome.bioproject_id || 'N/A'}
-                    </Typography>
-                  </div>
-                }
-              />
-            </ListItem>
-            <Divider />
-            <ListItem>
-              <ListItemText 
-                primary="Download URL"
-                secondary={
-                  <div style={{ marginTop: 1 }}>
-                    <Typography 
-                      variant="body2" 
-                      color="primary" 
-                      sx={{ 
-                        wordBreak: 'break-all',
-                        fontFamily: 'monospace',
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      {selectedGenome.url}
-                    </Typography>
-                  </div>
-                }
-              />
-            </ListItem>
-          </List>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleCloseInfoModal} color="primary">
-          Close
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
+      );
+    };
+
+    return (
+      <Grid item xs={12} md={4} key={type}>
+        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+              {getAnalysisIcon(type)}
+              <Typography variant="h6" sx={{ ml: 1 }}>{getAnalysisTitle(type)}</Typography>
+            </div>
+            {cardContent()}
+          </CardContent>
+        </Card>
+      </Grid>
+    );
+  };
 
   return (
-    <>
-    <Header/>
-    <div style={{ padding: 2 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
-        Bacteriophage
+    <div style={{ padding: 3 }}>
+      <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold' }}>
+        Genome Analysis Dashboard
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      
 
-      {successMessage && (
-        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccessMessage(null)}>
-          {successMessage}
-        </Alert>
-      )}
-
-      {/* Input Section */}
+      {/* BioProject Input Section */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" sx={{ mb: 2 }}>
             Fetch Genomes
           </Typography>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="BioProject ID"
+          <div style={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 300 }}>
+              <input
+                type="text"
+                placeholder="BioProject ID e.g., PRJNA123456"
                 value={bioprojectId}
                 onChange={(e) => setBioprojectId(e.target.value)}
-                placeholder="e.g., PRJNA123456"
-                disabled={loading || !!fetchJobId}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: '1px solid #ccc',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  outline: 'none',
+                  borderColor: '#1976d2'
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleFetchGenomes();
+                  }
+                }}
               />
-            </Grid>
-            <Grid item xs={12} md={6}>
+            </div>
               <Button
                 variant="contained"
                 onClick={handleFetchGenomes}
-                disabled={loading || !!fetchJobId || !bioprojectId.trim()}
-                startIcon={fetchJobId ? <CircularProgress size={20} /> : <DownloadIcon />}
-                sx={{ minWidth: 200 }}
+              disabled={fetchingGenomes || !bioprojectId.trim()}
+              startIcon={fetchingGenomes ? <CircularProgress size={20} /> : <RefreshIcon />}
+                sx={{
+                  py: 1.5,
+                  px: 3,
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)',
+                  '&:hover': {
+                    boxShadow: '0 4px 12px rgba(25, 118, 210, 0.4)',
+                    transform: 'translateY(-1px)',
+                  },
+                  '&:active': {
+                    transform: 'translateY(0)',
+                    boxShadow: '0 1px 4px rgba(25, 118, 210, 0.3)',
+                  },
+                  '&:disabled': {
+                    opacity: 0.6,
+                    transform: 'none',
+                    boxShadow: 'none',
+                  },
+                  transition: 'all 0.2s ease-in-out',
+                }}
               >
-                {fetchJobId ? 'Fetching...' : 'Fetch Genomes'}
+              {fetchingGenomes ? 'Fetching...' : 'Fetch Genomes'}
               </Button>
-            </Grid>
-          </Grid>
-
-          {fetchStatus && (
-            <div style={{ marginTop: 2 }}>
-              <Chip
-                label={`Status: ${fetchStatus.status}`}
-                color={getStatusColor(fetchStatus.status) as any}
-                sx={{ mr: 1 }}
-              />
-              {fetchStatus.status === 'completed' && (
-                <Chip
-                  label={`${fetchStatus.result?.count || 0} genomes found`}
-                  color="success"
-                />
-              )}
+          </div>
+          {genomes.length > 0 && (
+            <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Typography variant="body2" sx={{ color: 'success.main' }}>
+                ✓ {genomes.length} genomes loaded and ready for analysis
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  setGenomes([]);
+                  setSnackbar({
+                    open: true,
+                    message: 'Genomes cleared',
+                    severity: 'info'
+                  });
+                }}
+                sx={{ fontSize: '0.75rem' }}
+              >
+                Clear Genomes
+              </Button>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* PHASTEST Fallback Alert */}
-      {showPhastestFallback && genomeUrls.length > 0 && renderPhastestFallback()}
-      
-      {/* PHASTEST API Down but no genomes */}
-      {showPhastestFallback && genomeUrls.length === 0 && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          <AlertTitle>PHASTEST API Unavailable</AlertTitle>
-          The PHASTEST API is currently down for maintenance or updates.
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            Please fetch genomes first, then you can download FASTA files for manual submission to{' '}
-            <a href="https://phastest.ca" target="_blank" rel="noopener noreferrer">
-              phastest.ca
-            </a>
-          </Typography>
-        </Alert>
-      )}
+      {/* Analysis Cards */}
+      <Grid container spacing={3}>
+        {renderAnalysisCard('resfinder', analysisJobs.resfinder)}
+        {renderAnalysisCard('phastest', analysisJobs.phastest)}
+        {renderAnalysisCard('vfdb', analysisJobs.vfdb)}
+      </Grid>
 
-      {/* Operation Buttons at the Top */}
-      {genomeUrls.length > 0 && renderOperationButtons()}
-
-      {/* Analysis Status & Downloads */}
-      {/* Analysis Status & Downloads */}
-      {genomeUrls.length > 0 && (
-        <Card sx={{ mb: 3 }}>
+      {/* Genome Table Section */}
+      {genomes.length > 0 && (
+        <Card sx={{ mb: 3, mt: 3 }}>
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Analysis Status & Downloads
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+              <Typography variant="h6">
+                Fetched Genomes ({genomes.length})
             </Typography>
-            <Grid container spacing={3}>
-              {(['resfinder', 'phastest', 'vfdb'] as const).map((type) => {
-                const job = analysisJobs[type];
-                const isCompleted = job && job.status === 'completed';
-                const isFailed = job && job.status === 'failed';
-                return (
-                  <Grid item xs={12} md={4} key={type}>
-                    <Card variant="outlined" sx={{ height: '100%' }}>
-                      <CardContent>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center' }}>
-                            {getAnalysisIcon(type)}
-                            <Typography variant="h6" sx={{ ml: 1 }}>
-                              {getAnalysisTitle(type)}
-                            </Typography>
-                          </div>
-
-                          {/* Special button for resfinder */}
-                          {type === 'resfinder' && isCompleted && (
-                            <button
-                              className="download-result-button"
-                              style={{
-                                width: '100%',
-                                height: '300px',
-                                zIndex: '1000',
-                                padding: '6px 12px',
-                                backgroundColor: '#388b8eff',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                                outline: 'none',
-                              }}
-                              onClick={() => handleManualDownload(type, job.job_id)}
-                            >
-                              <DownloadIcon style={{ fontSize: '16px', color: 'white' }} />
-                              ResFinder Result
-                            </button>
-                          )}
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  setGenomes([]);
+                  setSnackbar({
+                    open: true,
+                    message: 'Genomes cleared',
+                    severity: 'info'
+                  });
+                }}
+                sx={{ fontSize: '0.75rem' }}
+              >
+                Clear All
+              </Button>
+            </div>
+            <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Accession</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Organism</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Assembly Level</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Genome Size</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Contigs</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Submitter</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {genomes.map((genome, index) => (
+                    <TableRow key={index} hover>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                          {genome.assembly_accession}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                            {genome.organism}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            {genome.genus} {genome.species}
+                          </Typography>
                         </div>
-
-                        {job && (
-                          <div style={{ marginBottom: 2 }}>
+                      </TableCell>
+                      <TableCell>
                             <Chip
-                              label={job.status}
-                              color={getStatusColor(job.status) as any}
+                          label={genome.assembly_level} 
                               size="small"
-                            />
-                          </div>
-                        )}
-
-                        {isFailed && job.error && (
-                          <Alert severity="error" sx={{ mb: 2 }}>
-                            {job.error}
-                          </Alert>
-                        )}
-
-                        {isCompleted && (
-                          <button
-                            className="download-results-button"
-                            style={{
-                              width: '100%',
-                              marginTop: '8px',
-                              padding: '12px 20px',
-                              backgroundColor: '#1976d2',
-                              color: 'yellow',
-                              border: 'none',
-                              borderRadius: '8px',
-                              fontSize: '14px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '10px',
-                              boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)',
-                              outline: 'none',
-                              textDecoration: 'none',
-                              textTransform: 'none',
-                              minHeight: '44px',
-                              transition: 'all 0.2s ease-in-out',
-                              position: 'relative',
-                              overflow: 'hidden',
-                            }}
-                            onMouseOver={(e) => {
-                              const target = e.target as HTMLButtonElement;
-                              target.style.backgroundColor = '#1565c0';
-                              target.style.boxShadow = '0 4px 12px rgba(25, 118, 210, 0.4)';
-                              target.style.transform = 'translateY(-1px)';
-                            }}
-                            onMouseOut={(e) => {
-                              const target = e.target as HTMLButtonElement;
-                              target.style.backgroundColor = '#1976d2';
-                              target.style.boxShadow = '0 2px 8px rgba(25, 118, 210, 0.3)';
-                              target.style.transform = 'translateY(0)';
-                            }}
-                            onMouseDown={(e) => {
-                              const target = e.target as HTMLButtonElement;
-                              target.style.transform = 'translateY(0)';
-                              target.style.boxShadow = '0 1px 4px rgba(25, 118, 210, 0.3)';
-                            }}
-                            onMouseUp={(e) => {
-                              const target = e.target as HTMLButtonElement;
-                              target.style.transform = 'translateY(-1px)';
-                              target.style.boxShadow = '0 4px 12px rgba(25, 118, 210, 0.4)';
-                            }}
-                            onClick={() => handleManualDownload(type, job.job_id)}
-                          >
-                            <DownloadIcon style={{ fontSize: '18px', color: 'white' }} />
-                            Download Results
-                          </button>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                );
-
-              })}
-            </Grid>
+                          color="primary" 
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {parseInt(genome.genome_size).toLocaleString()} bp
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {parseInt(genome.contig_count).toLocaleString()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+                          {genome.submitter}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       )}
 
-      {/* PHASTEST Zip Files Section */}
+      {/* PHASTEST Fallback Section */}
       {phastestZipFiles.length > 0 && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
               <Typography variant="h6">
-                PHASTEST Zip Files ({phastestZipFiles.length})
+                PHASTEST Results Available ({phastestZipFiles.length})
               </Typography>
               <Button
                 variant="contained"
@@ -840,13 +859,30 @@ const Dashboard = () => {
                 startIcon={<DownloadIcon />}
                 disabled={loadingZipFiles}
                 sx={{
-                  borderRadius: '8px',
-                  textTransform: 'none',
+                  py: 1.5,
+                  px: 3,
                   fontSize: '0.875rem',
-                  fontWeight: 500,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)',
+                  '&:hover': {
+                    boxShadow: '0 4px 12px rgba(25, 118, 210, 0.4)',
+                    transform: 'translateY(-1px)',
+                  },
+                  '&:active': {
+                    transform: 'translateY(0)',
+                    boxShadow: '0 1px 4px rgba(25, 118, 210, 0.3)',
+                  },
+                  '&:disabled': {
+                    opacity: 0.6,
+                    transform: 'none',
+                    boxShadow: 'none',
+                  },
+                  transition: 'all 0.2s ease-in-out',
                 }}
               >
-                Download All ZIP Files
+                Download All Results
               </Button>
             </div>
             <TableContainer component={Paper} sx={{ maxHeight: 300 }}>
@@ -858,7 +894,7 @@ const Dashboard = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {phastestZipFiles.map((file, index) => (
+                  {phastestZipFiles.map((file: { filename: string; size_mb: number }, index: number) => (
                     <TableRow key={index}>
                       <TableCell>{file.filename}</TableCell>
                       <TableCell align="right">{file.size_mb}</TableCell>
@@ -871,76 +907,47 @@ const Dashboard = () => {
         </Card>
       )}
 
-      {/* Temporary FASTA Zip Files Section */}
-      {tempFastaZipFiles.length > 0 && (
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-              <Typography variant="h6">
-                Temporary FASTA Zip Files ({tempFastaZipFiles.length})
-              </Typography>
-              <Button
-                variant="outlined"
-                onClick={loadTempFastaZipFiles}
-                startIcon={<DownloadIcon />}
-                disabled={loadingTempZipFiles}
-              >
-                Refresh List
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({ ...confirmDialog, open: false })}>
+        <DialogTitle>Confirm Action</DialogTitle>
+        <DialogContent>
+          Are you sure you want to {confirmDialog.action} the {confirmDialog.type} analysis?
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}>
+            Cancel
               </Button>
-            </div>
-            <TableContainer component={Paper} sx={{ maxHeight: 300 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Filename</TableCell>
-                    <TableCell>Directory</TableCell>
-                    <TableCell align="right">Size (MB)</TableCell>
-                    <TableCell align="right">Created</TableCell>
-                    <TableCell align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {tempFastaZipFiles.map((file, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{file.filename}</TableCell>
-                      <TableCell>{file.temp_dir}</TableCell>
-                      <TableCell align="right">{file.size_mb}</TableCell>
-                      <TableCell align="right">
-                        {new Date(file.created_time * 1000).toLocaleString()}
-                      </TableCell>
-                      <TableCell align="center">
                         <Button
-                          variant="contained"
-                          size="small"
-                          onClick={() => handleDownloadTempFastaZip(file.temp_dir, file.filename)}
-                          startIcon={<DownloadIcon />}
-                          sx={{
-                            borderRadius: '6px',
-                            textTransform: 'none',
-                            fontSize: '0.75rem',
-                            fontWeight: 500,
-                          }}
-                        >
-                          Download
+            onClick={() => {
+              if (confirmDialog.action === 'stop') {
+                handleStopJob(confirmDialog.jobId, confirmDialog.type);
+              }
+              setConfirmDialog({ ...confirmDialog, open: false });
+            }}
+            color="error"
+            variant="contained"
+          >
+            {confirmDialog.action === 'stop' ? 'Stop' : 'Confirm'}
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
-      )}
+        </DialogActions>
+      </Dialog>
 
-      {/* Compact Genome Table */}
-      {genomeUrls.length > 0 && renderGenomeTable()}
-
-      {/* Genome Info Modal */}
-      {renderGenomeInfoModal()}
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </div>
-    </>
   );
 };
 
-export default Dashboard; 
+export default Dashboard;
